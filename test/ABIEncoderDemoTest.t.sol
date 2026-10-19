@@ -13,11 +13,12 @@ import {ABIEncoderDemo} from "../src/ABIEncoderDemo.sol";
 contract ABIEncoderDemoTest is Test {
     ABIEncoderDemo private demo;
 
+    /// @notice Deploys a fresh ABIEncoderDemo instance before each test.
     function setUp() public {
         demo = new ABIEncoderDemo();
     }
 
-    /// @dev Pool ID must be invariant to token ordering (tokens are sorted internally)
+    /// @notice Verifies that a pool identifier is independent of token ordering.
     function test_createPoolId_sameForBothTokenOrders_OK() public view {
         address tokenA = address(0x1000);
         address tokenB = address(0x2000);
@@ -29,7 +30,7 @@ contract ABIEncoderDemoTest is Test {
         assertEq(idAB, idBA);
     }
 
-    /// @dev Pool ID must be different if the fee value provided is not the same
+    /// @notice Verifies that different fee values produce different pool identifiers.
     function test_createPoolId_differentFeeDifferentId_OK() public view {
         address tokenA = address(0x1000);
         address tokenB = address(0x2000);
@@ -42,6 +43,7 @@ contract ABIEncoderDemoTest is Test {
         assertNotEq(idLow, idHigh);
     }
 
+    /// @notice Verifies the encoded trading position data and its hash.
     function test_encodeTradingPosition_returnsExpectedDataAndHash_OK() public {
         address user = makeAddr("alice");
         address tokenIn = address(0x1000);
@@ -63,6 +65,7 @@ contract ABIEncoderDemoTest is Test {
         assertEq(encodedData, expectedData, "position id keccak mismatch");
     }
 
+    /// @notice Verifies the encoding of a swap path, amounts, and deadline.
     function test_encodeSwapData_encodesPathAmountsDeadline_OK() public {
         address[] memory path = new address[](2);
         path[0] = vm.addr(1);
@@ -95,6 +98,7 @@ contract ABIEncoderDemoTest is Test {
         assertEq(swapData, expectedSwapData, "mismatch in encoded data");
     }
 
+    /// @notice Verifies that swap encoding reverts when path and amount lengths differ.
     function test_encodeSwapData_differentArrayLengths_KO() public {
         address[] memory path = new address[](3);
         path[0] = vm.addr(1);
@@ -113,6 +117,28 @@ contract ABIEncoderDemoTest is Test {
         demo.encodeSwapData(path, amounts, deadline);
     }
 
+    /// @notice Verifies the encoded limit order data and its hash.
+    function test_encodeLimitOrder_returnsExpectedOrderHashAndOrderData_OK() public {
+        address maker = makeAddr("alice");
+        address taker = makeAddr("bob");
+        address tokenIn = address(0x001);
+        address tokenOut = address(0x002);
+        uint256 amountIn = 1 ether;
+        uint256 amountOut = 2 ether;
+        uint256 nonce = 5;
+
+        (bytes32 orderHash, bytes memory orderData) =
+            demo.encodeLimitOrder(maker, taker, tokenIn, tokenOut, amountIn, amountOut, nonce);
+
+        bytes memory expectedOrderData =
+            abi.encodePacked(maker, taker, tokenIn, tokenOut, amountIn, amountOut, nonce, "LIMIT_ORDER_V1");
+        bytes32 expectedOrderHash = keccak256(expectedOrderData);
+
+        assertEq(orderData, expectedOrderData, "order limit data mismatch");
+        assertEq(orderHash, expectedOrderHash, "order hash mismatch");
+    }
+
+    /// @notice Verifies the position identifier generated for a yield position.
     function test_encodeYieldPosition_returnsExpectedPositionId_OK() public {
         address user = makeAddr("alice");
         address tokenA = address(0x1000);
@@ -128,6 +154,7 @@ contract ABIEncoderDemoTest is Test {
         assertEq(positionId, expectedPositionId, "position hashes mismatch");
     }
 
+    /// @notice Verifies the encoded flash loan data.
     function test_encodeFlashLoanData_returnsExpectedFlashData_OK() public view {
         address token = address(0x1000);
         uint256 amount = 1 ether;
@@ -137,5 +164,22 @@ contract ABIEncoderDemoTest is Test {
         bytes memory expectedFlashData = abi.encodePacked(token, amount, callbackData, "FLASH_LOAN_V1");
 
         assertEq(flashData, expectedFlashData, "flash data hashes mismatch");
+    }
+
+    /// @notice Verifies the staking pool configuration encoding.
+    function test_encodeStakingPoolConfig_returnsExpectedPoolConfig_OK() public {
+        address token = address(0x100);
+        uint256 rewardRate = 100;
+        uint256 lockPeriod = 100_000_000;
+        uint256 maxStakers = 500;
+
+        // Freeze block timestamp to a known value
+        uint256 fixedTs = 1_700_000_000;
+        vm.warp(fixedTs);
+
+        bytes memory poolConfig = demo.encodeStakingPoolConfig(token, rewardRate, lockPeriod, maxStakers);
+        bytes memory expectedPoolConfig = abi.encodePacked(token, rewardRate, lockPeriod, maxStakers, fixedTs);
+
+        assertEq(poolConfig, expectedPoolConfig, "poolConfig hashes mismatch");
     }
 }
